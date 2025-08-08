@@ -25,7 +25,7 @@
                     resolve();
                 } else {
                     const script = document.createElement('script');
-                    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyBoyn6j2iBSYnjo9SS5PnCP_zMuz-ME1_8&libraries=places&callback=init`;
+                    script.src = `TU_API_KEY&libraries=places&callback=init`;
                     document.head.appendChild(script);
                     window.init = resolve;
                 }
