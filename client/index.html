@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <script type='module' src='https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js'></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, system-ui, sans-serif;
+        }
+        gmpx-place-picker {
+            --gmpx-color-primary: #0071ea93;
+            --gmpx-color-surface: #ffffff;
+            --gmpx-color-on-surface: #808080;
+            --gmpx-font-family-base: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+            width: 300px;
+            margin: 8px auto;
+        }
+        gmp-map {
+            height: calc(100% - 0px);
+        }
+    </style>a
+    <script>
+        // Variables getting from FileMaker
+        // These variables should be set by FileMaker before this script runs
+        let coordinates = {};
+        let nombre = '';
+        let direccion = '';
+        const addressUtils = {
+            getComponent: (components, types) => {
+                const found = components?.find(comp =>
+                    types.every(type => comp.types.includes(type))
+                );
+                return found?.long_name || found?.longText || '';
+            },
+
+            getDelegacion: (adrAddress) => {
+                try {
+                    const matches = [...adrAddress?.matchAll(/<span class=\"region\">(.*?)<\/span>/g) || []];
+                    return matches.length === 2 ? matches[0][1].trim() : '';
+                } catch {
+                    return '';
+                }
+            },
+
+            buildAddressLine: (components) => {
+                 const street = addressUtils.getComponent(components, ['route']);
+                const number = addressUtils.getComponent(components, ['street_number']);
+                return `${street} ${number}`.trim();
+            }
+        };
+
+        async function loadGoogleMaps() {
+            const { Map, Places } = await Promise.all([
+                google.maps.importLibrary('maps'),
+                google.maps.importLibrary('places')
+            ]);
+            return { Map, Places };
+        }
+
+        async function init() {
+            try {
+                await loadGoogleMaps();
+                
+                await customElements.whenDefined('gmp-map');
+
+                const map = document.querySelector('gmp-map');
+                const marker = document.querySelector('gmp-advanced-marker');
+                const placePicker = document.querySelector('gmpx-place-picker');
+                const infowindow = new google.maps.InfoWindow();
+
+                if (coordinates && coordinates.lat && coordinates.lng) {
+                    marker.position = coordinates;
+                    map.center = coordinates;
+                    map.zoom = 17; 
+
+                    infowindow.setContent(`
+                            <div style="min-width:200px">
+                                <strong>${nombre}</strong><br>
+                                <small>${direccion}</small>
+                            </div>
+                        `);
+                        infowindow.open(map.innerMap, marker);
+                }
+
+                placePicker.addEventListener('gmpx-placechange', async () => {
+                    try {
+                        const place = placePicker.value;
+                        if (!place) return;
+
+                        if (place.viewport) {
+                            map.innerMap.fitBounds(place.viewport);
+                        } else {
+                            map.center = place.location;
+                            map.zoom = 17;
+                        }
+
+                        const { Place } = await google.maps.importLibrary('places');
+                        const placeData = new Place({ id: place.id });
+                        
+                        await placeData.fetchFields({ 
+                            fields: ['addressComponents', 'adrFormatAddress', 'formattedAddress'] 
+                        });
+
+                        const datos = {
+                            id: place.id,
+                            nombre: place.displayName || '',
+                            direccion1: addressUtils.buildAddressLine(placeData.addressComponents),
+                            colonia: addressUtils.getComponent(placeData.addressComponents, 
+                                ['neighborhood', 'political']) || 
+                                addressUtils.getComponent(placeData.addressComponents, 
+                                ['sublocality', 'political']),
+                            delegacion: addressUtils.getDelegacion(placeData.adrFormatAddress),
+                            codigoPostal: addressUtils.getComponent(placeData.addressComponents, ['postal_code']),
+                            ciudad: addressUtils.getComponent(placeData.addressComponents, ['locality', 'political']),
+                            estado: addressUtils.getComponent(placeData.addressComponents, 
+                                ['administrative_area_level_1', 'political']),
+                            pais: addressUtils.getComponent(placeData.addressComponents, ['country', 'political']),
+                            coordenadas: place.location,
+                            direccionCompleta: placeData.formattedAddress
+                        };
+
+                        if (typeof FileMaker !== 'undefined') {
+                            FileMaker.PerformScript(
+                                'cliente = clDireccion|SAVE[js]|v0.25.2', 
+                                JSON.stringify(datos)
+                            );
+                        }
+                    
+                    } catch (error) {
+                        console.error('Error en placechange:', error);
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error en inicialización:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</head>
+<body>
+    <!-- /* Set up the GMPX API loader with your API key */ -->
+    <gmpx-api-loader key='TU_API_KEY'
+        solution-channel='GMP_GE_mapsandplacesautocomplete_v2'>
+    </gmpx-api-loader>
+
+    <gmp-map center='19.4326,-99.1332' zoom='13' map-id='DEMO_MAP_ID'>
+        <div slot='control-block-start-inline-start'>
+            <gmpx-place-picker placeholder='Buscar dirección...'></gmpx-place-picker>
+        </div>
+        <gmp-advanced-marker></gmp-advanced-marker>
+    </gmp-map>
+</body>
+</html>

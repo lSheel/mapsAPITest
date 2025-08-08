@@ -1,0 +1,110 @@
+"data:text/html,<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='UTF-8' />
+    <script type='module'
+        src='https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js'></script>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        .place-picker-container {
+            padding: 5px;
+        }
+    </style>
+    <script>
+    let coordinates =" & $placeCoordenadas & ";
+        async function init() {
+            await customElements.whenDefined('gmp-map');
+            const map = document.querySelector('gmp-map');
+            const marker = document.querySelector('gmp-advanced-marker');
+            const placePicker = document.querySelector('gmpx-place-picker');
+            const infowindow = new google.maps.InfoWindow();
+           if(Object.keys(coordinates).length !== 0){
+            marker.position = coordinates;
+             map.center = coordinates;
+            map.zoom = 25; 
+            }
+            placePicker.addEventListener('gmpx-placechange', () => {
+                const place = placePicker.value;
+
+                if (place.viewport) {
+                    map.innerMap.fitBounds(place.viewport);
+                } else {
+                    map.center = place.location;
+                    map.zoom = 25;
+                }
+
+                marker.position = place.location;
+
+                infowindow.setContent(
+                    '<strong>' + (place.displayName || 'Sin nombre') + '</strong><br>' +
+                    '<span>' + place.formattedAddress + '</span>'
+                );
+                infowindow.open(map.innerMap, marker);
+
+                const partes = place.formattedAddress.split(',').map(p => p.trim());
+                const [direccion1 = '', colonia = ''] = partes;
+
+                const datos = {
+                    id: place.id,
+                    nombre: place.displayName,
+                    direccion1,
+                    colonia,
+                    delegacion: '',
+                    codigoPostal: '',
+                    ciudad: '',
+                    estado: '',
+                    pais: '',
+                    coordenadas: place.location
+                };
+
+                const indexMap = {
+                    7: { delegacion: 3, cpCiudad: 4, estado: 5, pais: 6 },
+                    6: { delegacion: 2, cpCiudad: 3, estado: 4, pais: 5 },
+                    5: { cpCiudad: 2, estado: 3, pais: 4 }
+                };
+
+                const mapping = indexMap[partes.length];
+                if (mapping) {
+                    if (mapping.delegacion !== undefined) {
+                        datos.delegacion = partes[mapping.delegacion] || '';
+                    }
+
+                    if (mapping.cpCiudad !== undefined) {
+                        const [cp, ...ciudadParts] = partes[mapping.cpCiudad].split(' ');
+                        datos.codigoPostal = cp || '';
+                        datos.ciudad = ciudadParts.join(' ') || '';
+                    }
+
+                    datos.estado = partes[mapping.estado] || '';
+                    datos.pais = partes[mapping.pais] || '';
+                }
+ 
+                FileMaker.PerformScript('api.googleMaps - cred|EDIT[js]^|v0.25.2', JSON.stringify(datos));
+
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</head>
+
+<body>
+    <gmpx-api-loader key='TU_API_KEY'
+        solution-channel='GMP_GE_mapsandplacesautocomplete_v2'>
+    </gmpx-api-loader>
+
+    <gmp-map center='19.4326,-99.1332' zoom='13' map-id='DEMO_MAP_ID'>
+        <div slot='control-block-start-inline-start' class='place-picker-container'>
+            <gmpx-place-picker placeholder='Buscar un lugar...'></gmpx-place-picker>
+        </div>
+        <gmp-advanced-marker></gmp-advanced-marker>
+    </gmp-map>
+</body>
+
+</html>"

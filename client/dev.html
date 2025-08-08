@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='UTF-8'>
+    <script type='module'
+        src='https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js'></script>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .place-picker-container {
+            padding: 5px;
+        }
+    </style>
+    <script>
+        let coordinates = { lat: 19.4326, lng: -99.1332 }; 
+        function loadGoogleMaps() {
+            return new Promise((resolve) => {
+                if (window.google && window.google.maps) {
+                    resolve();
+                } else {
+                    const script = document.createElement('script');
+                    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyBoyn6j2iBSYnjo9SS5PnCP_zMuz-ME1_8&libraries=places&callback=init`;
+                    document.head.appendChild(script);
+                    window.init = resolve;
+                }
+            });
+        }
+
+        function getAddressComponent(components, types) {
+            return components.find(comp => types.every(type => comp.types.includes(type)))?.long_name || '';
+        }
+
+        function getDelegacion(adrAddress) {
+            const matches = [...adrAddress.matchAll(/<span class="region">(.*?)<\/span>/g)];
+            return matches.length !== 2 ? '' : matches[0][1].trim();
+        }
+
+        async function init() {
+            await customElements.whenDefined('gmp-map');
+            const map = document.querySelector('gmp-map');
+            const marker = document.querySelector('gmp-advanced-marker');
+            const placePicker = document.querySelector('gmpx-place-picker');
+            const infowindow = new google.maps.InfoWindow();
+
+            if (coordinates && Object.keys(coordinates).length !== 0) {
+                marker.position = coordinates;
+                map.center = coordinates;
+                map.zoom = 17;
+            }
+
+            placePicker.addEventListener('gmpx-placechange', async () => {
+                const place = placePicker.value;
+
+                if (place.viewport) {
+                    map.innerMap.fitBounds(place.viewport);
+                } else {
+                    map.center = place.location;
+                    map.zoom = 17;
+                }
+
+                marker.position = place.location;
+
+                infowindow.setContent(
+                    '<strong>' + (place.displayName) + '</strong><br>' +
+                    '<span>' + place.formattedAddress + '</span>'
+                );
+                infowindow.open(map.innerMap, marker);
+
+                const request = {
+                    placeId: place.id,
+                    fields: ['address_components', 'adr_address']
+                };
+
+                const service = new google.maps.places.PlacesService(document.createElement('div'));
+
+                service.getDetails(request, (placeDetails, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        const components = placeDetails.address_components;
+                        const adrDel = placeDetails.adr_address;
+
+                        const datos = {
+                            id: place.id,
+                            nombre: place.displayName,
+                            direccion1: getAddressComponent(components, ['route']) + ' ' +
+                                getAddressComponent(components, ['street_number']),
+                            colonia: getAddressComponent(components, ['neighborhood', 'political']) ||
+                                getAddressComponent(components, ['political', 'sublocality', 'sublocality_level_1']),
+                            delegacion: getDelegacion(adrDel),
+                            codigoPostal: getAddressComponent(components, ['postal_code']),
+                            ciudad: getAddressComponent(components, ['locality', 'political']),
+                            estado: getAddressComponent(components, ['administrative_area_level_1', 'political']),
+                            pais: getAddressComponent(components, ['country', 'political']),
+                            coordenadas: place.location
+                        };
+                        FileMaker.PerformScript('api.googleMaps - cred|EDIT[js]^|v0.25.2', JSON.stringify(datos));
+                    }
+                });
+
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadGoogleMaps();
+            await init();
+        });
+    </script>
+</head>
+
+<body>
+    <gmpx-api-loader key='TU_API_KEY'
+        solution-channel='GMP_GE_mapsandplacesautocomplete_v2'>
+    </gmpx-api-loader>
+
+    <gmp-map center='19.4326,-99.1332' zoom='13' map-id='DEMO_MAP_ID'>
+        <div slot='control-block-start-inline-start' class='place-picker-container'>
+            <gmpx-place-picker placeholder='Buscar un lugar...'></gmpx-place-picker>
+        </div>
+        <gmp-advanced-marker></gmp-advanced-marker>
+    </gmp-map>
+</body>
+
+</html>
